@@ -1,28 +1,28 @@
 name: Update dataset
 
 on:
-  # Executa todo domingo às 06 h UTC e quando você clicar “Run workflow”
+  # executa manualmente ou todo domingo 06 h UTC
+  workflow_dispatch:
   schedule:
     - cron: "0 6 * * 0"
-  workflow_dispatch:
 
 jobs:
   refresh:
     runs-on: ubuntu-latest
 
     steps:
-      # Clona seu repo
+      # 1 ⃣ clona o repositório
       - uses: actions/checkout@v4
 
-      # Python 3.11
+      # 2 ⃣ instala Python 3.11
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      # Instala kaggle-cli
+      # 3 ⃣ instala a CLI do Kaggle
       - run: pip install kaggle --quiet
 
-      # ↓↓↓ PASSO CRÍTICO — baixa o ZIP, descompacta e deleta o zip ↓↓↓
+      # 4 ⃣ baixa o ZIP, descompacta e renomeia o CSV
       - name: Download latest ZIP from Kaggle
         env:
           KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
@@ -31,16 +31,19 @@ jobs:
           mkdir -p data
           kaggle datasets download -d datahackers/state-of-data-brazil-20242025 -p data --force
           unzip -o data/state-of-data-brazil-20242025.zip -d data
-          rm      data/state-of-data-brazil-20242025.zip
+          # o CSV vem com nome comprido; pega-o e renomeia
+          mv "$(ls data | grep 'df_survey_2024.csv')" data/df_survey_2024.csv
+          rm -rf data/state-of-data-brazil-20242025*
+          rm -f data/*.zip
 
-      # Commita só se o CSV mudou
+      # 5 ⃣ commita e faz push só se o CSV mudou
       - name: Commit & push if dataset changed
         run: |
           git config --global user.name  "github-actions"
           git config --global user.email "actions@users.noreply.github.com"
           git add data/df_survey_2024.csv || true
           if ! git diff --cached --quiet; then
-            git commit -m "chore(data): refresh SoD CSV" && git push
+            git commit -m "chore(data): refresh State-of-Data CSV" && git push
           else
             echo "No dataset update"
           fi
