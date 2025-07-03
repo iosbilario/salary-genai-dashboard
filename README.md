@@ -8,7 +8,7 @@ Streamlit app to explore the **State of Data Brazil 2024/2025** survey and answe
 ## Quick start
 
 ```bash
-git clone https://github.com/YOUR-USER/salary-genai-dashboard.git
+git clone https://github.com/iosbilario/salary-genai-dashboard.git 
 cd salary-genai-dashboard
 pip install -r requirements.txt
 export KAGGLE_USERNAME=your_user
