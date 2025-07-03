@@ -71,8 +71,9 @@ st.set_page_config(page_title="Salary × GenAI", layout="wide")
 df = load_data()
 
 # ---------- detecta colunas de nível & setor ----------
-level_candidates  = [c for c in df.columns if re.search(r"(?i)nivel$",  c)]
-sector_candidates = [c for c in df.columns if re.search(r"(?i)setor$", c)]
+level_candidates  = [c for c in df.columns if re.search(r'(?i)nivel_profissional$', c)]
+sector_candidates = [c for c in df.columns if re.search(r'(?i)setor$', c)]
+
 if not level_candidates or not sector_candidates:
     st.error("Colunas de nível ou setor não encontradas no dataset!")
     st.stop()
