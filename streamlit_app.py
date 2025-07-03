@@ -1,4 +1,4 @@
-# streamlit_app.py – Salary × GenAI Dashboard
+# streamlit_app.py  – Salary × GenAI Dashboard
 # -----------------------------------------------------------------------------
 import pandas as pd, numpy as np, re, zipfile, streamlit as st, plotly.express as px
 from pathlib import Path
@@ -10,7 +10,7 @@ from sklearn.pipeline import Pipeline
 from kaggle.api.kaggle_api_extended import KaggleApi
 
 # -----------------------------------------------------------------------------
-# Config & download
+# Config e download
 DATA_DIR = Path("data"); DATA_DIR.mkdir(exist_ok=True)
 DATA_PATH = DATA_DIR / "df_survey_2024.csv"
 KAGGLE_DS = "datahackers/state-of-data-brazil-20242025"
@@ -37,12 +37,11 @@ def faixa_to_mid(tx):
     if "Menos de" in tx and nums: return nums[0]*0.5
     return sum(nums)/2 if len(nums)==2 else np.nan
 
-@st.cache_data(show_spinner="🔄 carregando…")
+@st.cache_data(show_spinner="🔄 Carregando…")
 def load():
     download_dataset()
     df = pd.read_csv(DATA_PATH, low_memory=False)
     df["salary_mid"] = df["2.h_faixa_salarial"].apply(faixa_to_mid)
-
     genai_cols = [c for c in df.columns if re.search(r"LLM|IA Generativa", c, re.I)]
     df["GenAI_user"] = df[genai_cols].fillna("").apply(
         lambda r: int(any(str(x).strip().lower() not in ("", "não", "nao") for x in r)), axis=1
@@ -64,6 +63,7 @@ level_col, sector_col = pick("nivel"), pick("setor")
 if not level_col or not sector_col:
     st.error("Colunas nível/​setor não encontradas!"); st.stop()
 
+# -----------------------------------------------------------------------------
 # Filtros
 st.sidebar.header("🎛️ Filtros")
 levels  = sorted(df[level_col].dropna().unique())
@@ -82,7 +82,8 @@ st.title("💰 Quem Usa GenAI Ganha Mais?")
 if sub.empty:
     st.warning("Sem dados para esses filtros."); st.stop()
 
-# ------------------- métricas (ordem: min, média, mediana, max)
+# -----------------------------------------------------------------------------
+# Métricas globais
 mini  = sub.salary_mid.min()
 mean  = sub.salary_mid.mean()
 med   = sub.salary_mid.median()
@@ -94,17 +95,30 @@ c2.metric("Média",   f"R$ {mean:,.0f}")
 c3.metric("Mediana", f"R$ {med:,.0f}")
 c4.metric("Máximo",  f"R$ {maxi:,.0f}")
 
-# ------------------- distribuição
+# -----------------------------------------------------------------------------
+# Distribuição salarial
 fig = px.violin(sub,y="salary_mid",x="GenAI_user",box=True,points="all",
                 labels={"GenAI_user":"Usa GenAI (0=Não,1=Sim)","salary_mid":"Salário (R$)"},
                 title="Distribuição salarial")
 st.plotly_chart(fig, use_container_width=True)
 
+# Disclaimer dinâmico global
 g1 = sub[sub.GenAI_user==1].salary_mid
 g0 = sub[sub.GenAI_user==0].salary_mid
+if len(g1) > 0 and len(g0) > 0:
+    lift = (g1.mean()/g0.mean()-1)*100
+    st.markdown(
+        f"📝 **Resumo:** entre os {len(sub):,} profissionais filtrados, "
+        f"{len(g1):,} ({len(g1)/len(sub):.0%}) usam GenAI. "
+        f"Eles ganham em média **{lift:+.1f}%** a mais que quem não usa "
+        f"(R$ {g1.mean():,.0f} vs R$ {g0.mean():,.0f})."
+    )
+
+# Teste estatístico
 if len(g1)>10 and len(g0)>10:
     _, p = mannwhitneyu(g1,g0); st.caption(f"Mann-Whitney p = {p:.2e}")
 
+# Odds ratio
 @st.cache_data
 def odds(df_):
     m=df_[["salary_mid","GenAI_user",level_col]].dropna()
@@ -119,15 +133,17 @@ def odds(df_):
     ]).fit(X,y)
     return float(np.exp(pipe.named_steps["clf"].coef_[0][-1]))
 or_val = odds(sub)
-st.write(f"**OR(GenAI_user): {or_val:.2f}×** prob. acima da média" if or_val else
-         "Sem variação GenAI neste recorte")
+if or_val: st.caption(f"OR(GenAI_user): {or_val:.2f} × prob. acima da mediana")
 
-# ------------------- prêmio % por setor
+# -----------------------------------------------------------------------------
+# Visão por setor — prêmio %
+# -----------------------------------------------------------------------------
 st.header("🔍 Prêmio salarial (%) por setor")
+
 agg = (sub.groupby([sector_col,"GenAI_user"]).salary_mid.mean()
           .unstack("GenAI_user")
           .rename(columns={0:"Sem GenAI",1:"Com GenAI"})).dropna()
-agg["Prêmio %"] = (agg["Com GenAI"] / agg["Sem GenAI"] - 1) * 100
+agg["Prêmio %"] = (agg["Com GenAI"]/agg["Sem GenAI"]-1)*100
 agg = agg.sort_values("Prêmio %", ascending=False)
 
 fig2 = px.bar(agg, y=agg.index, x="Prêmio %", orientation="h",
@@ -137,6 +153,17 @@ fig2 = px.bar(agg, y=agg.index, x="Prêmio %", orientation="h",
 fig2.update_traces(texttemplate="%{text:.1f} %")
 fig2.update_layout(yaxis={"categoryorder":"total ascending"})
 st.plotly_chart(fig2, use_container_width=True)
+
+# Disclaimer dinâmico por setor
+positivos = (agg["Prêmio %"] > 0).sum()
+negativos = (agg["Prêmio %"] < 0).sum()
+top_setor = agg.iloc[0].name
+top_pct   = agg.iloc[0]["Prêmio %"]
+st.markdown(
+    f"📝 **Resumo por setor:** em **{positivos}** setores o uso de GenAI está "
+    f"associado a salário **maior**, enquanto em **{negativos}** aparece menor. "
+    f"O maior prêmio é em **{top_setor}** (+{top_pct:.1f} %)."
+)
 
 st.dataframe(
     agg[["Sem GenAI","Com GenAI","Prêmio %"]]
