@@ -1,41 +1,38 @@
 name: Update dataset
 
 on:
+  workflow_dispatch:
   schedule:
-    - cron: "0 6 * * 0"          # domingo 06 UTC
-  workflow_dispatch:             # botão “Run workflow”
+    - cron: "0 6 * * 0"   # domingo 06 UTC
 
 jobs:
-  update-data:
+  refresh:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Python
+      - name: Setup Python & Kaggle CLI
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
       - run: pip install kaggle --quiet
 
-      - name: Download latest ZIP from Kaggle
+      - name: Download & unzip latest dataset
         env:
           KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
           KAGGLE_KEY:      ${{ secrets.KAGGLE_KEY }}
         run: |
           mkdir -p data
-          kaggle datasets download -d datahackers/state-of-data-brazil-20242025 -p data --force
-          unzip -o data/state-of-data-brazil-20242025.zip -d data
-          rm data/state-of-data-brazil-20242025.zip
+          kaggle datasets download -d datahackers/state-of-data-brazil-20242025 \
+            -p data --unzip --force
 
-      - name: Commit & push if dataset changed
+      - name: Commit if CSV changed
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "actions@users.noreply.github.com"
           git add data/df_survey_2024.csv || true
           if ! git diff --cached --quiet; then
-            git commit -m "chore(data): refresh State-of-Data CSV" && git push
+            git commit -m "chore: refresh dataset" && git push
           else
-            echo "No changes to commit"
+            echo "Nenhuma mudança"
           fi
